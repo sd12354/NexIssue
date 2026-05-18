@@ -1,0 +1,19 @@
+# Supabase local development — https://supabase.com/docs/guides/cli/config
+# Run `supabase init` or link a project with `supabase link` when ready.
+
+project_id = "nexissue"
+
+[api]
+enabled = true
+port = 54321
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[functions]
+enabled = true

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+out/
+
+# Expo
+.expo/
+expo-env.d.ts
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS & editors
+.DS_Store
+*.log
+.idea/
+.vscode/
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+coverage/

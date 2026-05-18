@@ -1,0 +1,19 @@
+{
+  "name": "nexissue",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "dev:web": "pnpm --filter web dev",
+    "dev:mobile": "pnpm --filter mobile dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
