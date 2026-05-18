@@ -1,5 +1,5 @@
 {
-  "name": "@nexissue/types",
+  "name": "types",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -13,9 +13,14 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "gen": "cd ../.. && supabase gen types typescript --project-id kwanmxeicyxohxxuwcjr 2>/dev/null > packages/types/src/database.types.ts"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.49.0"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.49.0",
     "typescript": "^5.8.3"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@nexissue/api",
+  "name": "@app/api",
   "version": "0.0.0",
   "private": true,
   "main": "./dist/index.js",
@@ -14,6 +14,10 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "types": "workspace:*",
+    "@supabase/supabase-js": "^2.49.0"
   },
   "devDependencies": {
     "typescript": "^5.8.3"
