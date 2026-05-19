@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "NexIssue",
-  description: "NexIssue web app",
+  description: "Graded comic operations — intake, catalog, and listing",
 };
 
 export default function RootLayout({
