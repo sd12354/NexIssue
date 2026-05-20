@@ -1,44 +1,42 @@
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "../components/AppIcon";
+import { LoadingSplash } from "../components/LoadingSplash";
 import { MainTabBar } from "../components/MainTabBar";
 import { useAuth } from "../contexts/AuthContext";
+import { CatalogProvider } from "../contexts/CatalogContext";
+import { CatalogScreen } from "../screens/CatalogScreen";
+import { CertConfirmScreen } from "../screens/CertConfirmScreen";
+import { CoverCaptureScreen } from "../screens/CoverCaptureScreen";
 import { HomeScreen } from "../screens/HomeScreen";
+import { LabelCaptureScreen } from "../screens/LabelCaptureScreen";
 import { PlaceholderScreen } from "../screens/PlaceholderScreen";
+import { ScannerScreen } from "../screens/ScannerScreen";
 import { SignInScreen } from "../screens/SignInScreen";
 import { SignUpScreen } from "../screens/SignUpScreen";
 import { colors } from "../theme/colors";
 import { headerIcons, screenHeroIcons } from "../theme/icons";
-import type { AuthScreen, MainTab } from "./types";
+import type {
+  AuthScreen,
+  CertConfirmParams,
+  MainTab,
+  ScanStep,
+} from "./types";
 
-function MainContent({ tab }: { tab: MainTab }) {
+function MainContent({
+  tab,
+  onScanTab,
+}: {
+  tab: MainTab;
+  onScanTab: () => void;
+}) {
   switch (tab) {
     case "Home":
       return <HomeScreen />;
     case "Catalog":
-      return (
-        <PlaceholderScreen
-          icon={screenHeroIcons.Catalog}
-          title="Catalog"
-          description="Your inventory list will appear here."
-        />
-      );
-    case "Scan":
-      return (
-        <PlaceholderScreen
-          icon={screenHeroIcons.Scan}
-          title="Scan"
-          description="QR cert lookup starts in the next Phase 1 milestone."
-        />
-      );
+      return <CatalogScreen onAdd={onScanTab} />;
     case "Advisor":
       return (
         <PlaceholderScreen
@@ -55,32 +53,130 @@ function MainContent({ tab }: { tab: MainTab }) {
           description="Org, integrations, and rules will live here."
         />
       );
+    default:
+      return null;
   }
+}
+
+function ScanFlow({ onFinishedSave }: { onFinishedSave: () => void }) {
+  const [step, setStep] = useState<ScanStep>("qr");
+  const [certDraft, setCertDraft] = useState<{
+    grader: CertConfirmParams["grader"];
+    certNumber: string;
+  } | null>(null);
+  const [labelParams, setLabelParams] = useState<CertConfirmParams | null>(null);
+
+  if (step === "qr") {
+    return (
+      <ScannerScreen
+        onContinueToLabel={(draft) => {
+          setCertDraft(draft);
+          setStep("label");
+        }}
+      />
+    );
+  }
+
+  if (step === "label" && certDraft) {
+    return (
+      <LabelCaptureScreen
+        certNumber={certDraft.certNumber}
+        grader={certDraft.grader}
+        onBack={() => {
+          setCertDraft(null);
+          setStep("qr");
+        }}
+        onComplete={(params) => {
+          setLabelParams(params);
+          setStep("covers");
+        }}
+      />
+    );
+  }
+
+  if (step === "covers" && certDraft && labelParams) {
+    return (
+      <CoverCaptureScreen
+        grader={certDraft.grader}
+        certNumber={certDraft.certNumber}
+        onBack={() => setStep("label")}
+        onComplete={({ front, back }) => {
+          setLabelParams({
+            ...labelParams,
+            covers: {
+              front: {
+                uri: front.uploadUri,
+                contentType: front.contentType,
+                extension: front.extension,
+                backgroundRemoved: front.backgroundRemoved,
+              },
+              back: {
+                uri: back.uploadUri,
+                contentType: back.contentType,
+                extension: back.extension,
+                backgroundRemoved: back.backgroundRemoved,
+              },
+            },
+          });
+          setStep("confirm");
+        }}
+      />
+    );
+  }
+
+  if (step === "confirm" && labelParams) {
+    return (
+      <CertConfirmScreen
+        params={labelParams}
+        onBack={() => setStep("covers")}
+        onSaved={() => {
+          setCertDraft(null);
+          setLabelParams(null);
+          setStep("qr");
+          onFinishedSave();
+        }}
+      />
+    );
+  }
+
+  return null;
 }
 
 function MainShell() {
   const [tab, setTab] = useState<MainTab>("Home");
   const insets = useSafeAreaInsets();
+  const isScanFlow = tab === "Scan";
   const title = tab === "Home" ? "NexIssue" : tab;
   const headerIcon = headerIcons[tab];
 
   return (
     <View style={styles.shell}>
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        {tab === "Home" ? (
-          <Image
-            accessibilityLabel="NexIssue"
-            source={require("../../assets/logo.png")}
-            style={styles.headerLogo}
+      {!isScanFlow ? (
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          {tab === "Home" ? (
+            <Image
+              accessibilityLabel="NexIssue"
+              source={require("../../assets/logo.png")}
+              style={styles.headerLogo}
+            />
+          ) : (
+            <AppIcon name={headerIcon} size={22} color={colors.text} />
+          )}
+          <Text style={styles.headerTitle}>{title}</Text>
+        </View>
+      ) : null}
+
+      <View style={[styles.content, isScanFlow && styles.contentFullBleed]}>
+        {isScanFlow ? (
+          <ScanFlow
+            key="scan-flow"
+            onFinishedSave={() => setTab("Catalog")}
           />
         ) : (
-          <AppIcon name={headerIcon} size={22} color={colors.text} />
+          <MainContent tab={tab} onScanTab={() => setTab("Scan")} />
         )}
-        <Text style={styles.headerTitle}>{title}</Text>
       </View>
-      <View style={styles.content}>
-        <MainContent tab={tab} />
-      </View>
+
       <MainTabBar active={tab} onChange={setTab} />
     </View>
   );
@@ -91,11 +187,7 @@ export function RootNavigator() {
   const [authScreen, setAuthScreen] = useState<AuthScreen>("signIn");
 
   if (loading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.accent} size="large" />
-      </View>
-    );
+    return <LoadingSplash />;
   }
 
   if (!session) {
@@ -106,16 +198,14 @@ export function RootNavigator() {
     );
   }
 
-  return <MainShell />;
+  return (
+    <CatalogProvider>
+      <MainShell />
+    </CatalogProvider>
+  );
 }
 
 const styles = StyleSheet.create({
-  loading: {
-    alignItems: "center",
-    backgroundColor: colors.background,
-    flex: 1,
-    justifyContent: "center",
-  },
   shell: {
     backgroundColor: colors.background,
     flex: 1,
@@ -142,5 +232,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentFullBleed: {
+    backgroundColor: "#000",
   },
 });

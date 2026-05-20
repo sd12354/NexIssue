@@ -1,0 +1,8 @@
+{
+  "name": "expo-vision-mask",
+  "version": "0.1.0",
+  "description": "Local Expo module wrapping Apple Vision foreground-instance mask for background removal.",
+  "main": "index.ts",
+  "types": "index.ts",
+  "private": true
+}

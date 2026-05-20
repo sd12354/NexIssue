@@ -13,7 +13,11 @@
       "backgroundColor": "#252878"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "NexIssue uses the camera to scan slab QR codes and photograph label text for OCR."
+      },
+      "bundleIdentifier": "com.anonymous.nexissue"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,13 +25,27 @@
         "backgroundColor": "#252878"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow NexIssue to scan slab QR codes and capture label photos."
+        }
+      ]
+    ],
+    "autolinking": {
+      "nativeModulesDir": "./modules"
+    }
   }
 }

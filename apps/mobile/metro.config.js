@@ -22,9 +22,18 @@ function resolveFromApp(moduleName) {
   );
 }
 
+// Pin shared/peer dependencies to the mobile app's hoisted copies so Metro
+// doesn't end up loading two copies of React, etc. from pnpm's nested store.
 config.resolver.extraNodeModules = {
   "@babel/runtime": resolveFromApp("@babel/runtime"),
   "hoist-non-react-statics": resolveFromApp("hoist-non-react-statics"),
+  react: resolveFromApp("react"),
+  "react-native": resolveFromApp("react-native"),
+  "react-native-web": resolveFromApp("react-native-web"),
+  "react-dom": resolveFromApp("react-dom"),
+  "expo-file-system": resolveFromApp("expo-file-system"),
+  "expo-image-manipulator": resolveFromApp("expo-image-manipulator"),
+  "expo-vision-mask": path.resolve(projectRoot, "modules/expo-vision-mask"),
 };
 
 module.exports = config;

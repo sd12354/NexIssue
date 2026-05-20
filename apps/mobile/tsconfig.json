@@ -1,8 +1,12 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "expo-vision-mask": ["./modules/expo-vision-mask"]
+    }
   },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules"]
+  "include": ["**/*.ts", "**/*.tsx", "modules/**/*.ts"],
+  "exclude": ["node_modules", "modules/**/node_modules"]
 }
