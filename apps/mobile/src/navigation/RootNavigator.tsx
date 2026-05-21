@@ -11,9 +11,11 @@ import { CatalogScreen } from "../screens/CatalogScreen";
 import { CertConfirmScreen } from "../screens/CertConfirmScreen";
 import { CoverCaptureScreen } from "../screens/CoverCaptureScreen";
 import { HomeScreen } from "../screens/HomeScreen";
+import { IntegrationsScreen } from "../screens/IntegrationsScreen";
 import { LabelCaptureScreen } from "../screens/LabelCaptureScreen";
 import { PlaceholderScreen } from "../screens/PlaceholderScreen";
 import { ScannerScreen } from "../screens/ScannerScreen";
+import { SettingsScreen } from "../screens/SettingsScreen";
 import { SignInScreen } from "../screens/SignInScreen";
 import { SignUpScreen } from "../screens/SignUpScreen";
 import { colors } from "../theme/colors";
@@ -25,18 +27,43 @@ import type {
   ScanStep,
 } from "./types";
 
+type SettingsRoute = "root" | "integrations";
+
+function SettingsStack({
+  route,
+  onRouteChange,
+}: {
+  route: SettingsRoute;
+  onRouteChange: (route: SettingsRoute) => void;
+}) {
+  if (route === "integrations") {
+    return <IntegrationsScreen onBack={() => onRouteChange("root")} />;
+  }
+  return (
+    <SettingsScreen onOpenIntegrations={() => onRouteChange("integrations")} />
+  );
+}
+
 function MainContent({
   tab,
   onScanTab,
+  settingsRoute,
+  onSettingsRouteChange,
+  onOpenIntegrations,
 }: {
   tab: MainTab;
   onScanTab: () => void;
+  settingsRoute: SettingsRoute;
+  onSettingsRouteChange: (route: SettingsRoute) => void;
+  onOpenIntegrations: () => void;
 }) {
   switch (tab) {
     case "Home":
       return <HomeScreen />;
     case "Catalog":
-      return <CatalogScreen onAdd={onScanTab} />;
+      return (
+        <CatalogScreen onAdd={onScanTab} onOpenIntegrations={onOpenIntegrations} />
+      );
     case "Advisor":
       return (
         <PlaceholderScreen
@@ -47,10 +74,9 @@ function MainContent({
       );
     case "Settings":
       return (
-        <PlaceholderScreen
-          icon={screenHeroIcons.Settings}
-          title="Settings"
-          description="Org, integrations, and rules will live here."
+        <SettingsStack
+          route={settingsRoute}
+          onRouteChange={onSettingsRouteChange}
         />
       );
     default:
@@ -144,10 +170,16 @@ function ScanFlow({ onFinishedSave }: { onFinishedSave: () => void }) {
 
 function MainShell() {
   const [tab, setTab] = useState<MainTab>("Home");
+  const [settingsRoute, setSettingsRoute] = useState<SettingsRoute>("root");
   const insets = useSafeAreaInsets();
   const isScanFlow = tab === "Scan";
   const title = tab === "Home" ? "NexIssue" : tab;
   const headerIcon = headerIcons[tab];
+
+  const openIntegrations = () => {
+    setTab("Settings");
+    setSettingsRoute("integrations");
+  };
 
   return (
     <View style={styles.shell}>
@@ -173,7 +205,13 @@ function MainShell() {
             onFinishedSave={() => setTab("Catalog")}
           />
         ) : (
-          <MainContent tab={tab} onScanTab={() => setTab("Scan")} />
+          <MainContent
+            tab={tab}
+            onScanTab={() => setTab("Scan")}
+            settingsRoute={settingsRoute}
+            onSettingsRouteChange={setSettingsRoute}
+            onOpenIntegrations={openIntegrations}
+          />
         )}
       </View>
 

@@ -369,6 +369,18 @@ allow_dynamic_registration = false
 [functions.cert-lookup]
 verify_jwt = true
 
+[functions.ebay-oauth-start]
+verify_jwt = true
+
+[functions.ebay-oauth-callback]
+# eBay sends the user here directly with an OAuth code; no Supabase session
+# JWT is available. Security is enforced by the single-use `state` token
+# stored in `oauth_states` plus the eBay client secret.
+verify_jwt = false
+
+[functions.listing-create]
+verify_jwt = true
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

@@ -237,6 +237,7 @@ export type Database = {
           credentials: Json
           id: string
           last_used_at: string | null
+          metadata: Json
           org_id: string
           provider: Database["public"]["Enums"]["integration_provider"]
           updated_at: string
@@ -247,6 +248,7 @@ export type Database = {
           credentials?: Json
           id?: string
           last_used_at?: string | null
+          metadata?: Json
           org_id: string
           provider: Database["public"]["Enums"]["integration_provider"]
           updated_at?: string
@@ -257,6 +259,7 @@ export type Database = {
           credentials?: Json
           id?: string
           last_used_at?: string | null
+          metadata?: Json
           org_id?: string
           provider?: Database["public"]["Enums"]["integration_provider"]
           updated_at?: string
@@ -264,6 +267,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "org_integrations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      oauth_states: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          org_id: string
+          provider: Database["public"]["Enums"]["integration_provider"]
+          return_scheme: string | null
+          state: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          org_id: string
+          provider: Database["public"]["Enums"]["integration_provider"]
+          return_scheme?: string | null
+          state: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          org_id?: string
+          provider?: Database["public"]["Enums"]["integration_provider"]
+          return_scheme?: string | null
+          state?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oauth_states_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"

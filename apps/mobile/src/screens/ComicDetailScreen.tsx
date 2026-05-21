@@ -23,6 +23,7 @@ type ComicDetailScreenProps = {
   onBack: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onSellNow: () => void;
 };
 
 type CoverUrls = { front: string | null; back: string | null };
@@ -33,6 +34,7 @@ export function ComicDetailScreen({
   onBack,
   onEdit,
   onDelete,
+  onSellNow,
 }: ComicDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const [urls, setUrls] = useState<CoverUrls>({ front: null, back: null });
@@ -187,6 +189,20 @@ export function ComicDetailScreen({
               </Text>
             ))}
           </View>
+        ) : null}
+
+        {comic.status === "in_inventory" ? (
+          <Pressable
+            onPress={onSellNow}
+            style={({ pressed }) => [
+              styles.sellButton,
+              pressed && styles.sellButtonPressed,
+            ]}
+            accessibilityLabel="Sell now on eBay"
+          >
+            <AppIcon name="pricetag-outline" size={20} color={colors.text} />
+            <Text style={styles.sellButtonLabel}>Sell Now</Text>
+          </Pressable>
         ) : null}
       </ScrollView>
     </View>
@@ -399,4 +415,16 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   noteItem: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  sellButton: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 4,
+    paddingVertical: 16,
+  },
+  sellButtonPressed: { opacity: 0.85 },
+  sellButtonLabel: { color: colors.text, fontSize: 16, fontWeight: "700" },
 });

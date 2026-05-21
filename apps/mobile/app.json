@@ -2,6 +2,7 @@
   "expo": {
     "name": "NexIssue",
     "slug": "nexissue",
+    "scheme": "nexissue",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -42,7 +43,8 @@
         {
           "cameraPermission": "Allow NexIssue to scan slab QR codes and capture label photos."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "autolinking": {
       "nativeModulesDir": "./modules"
