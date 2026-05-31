@@ -40,6 +40,7 @@ import {
   exchangeCodeForTokens,
   fetchEbayUser,
 } from "../_shared/ebay.ts";
+import { optInToSellingPolicyManagement } from "../_shared/ebay-sell.ts";
 import { encryptJson } from "../_shared/encryption.ts";
 
 type CallbackErrorCode =
@@ -87,6 +88,23 @@ function htmlError(message: string): Response {
   );
 }
 
+function isWebReturnUrl(scheme: string): boolean {
+  return /^https?:\/\//i.test(scheme);
+}
+
+function buildRedirectTarget(scheme: string, params: URLSearchParams): string {
+  if (isWebReturnUrl(scheme)) {
+    const url = new URL(scheme);
+    for (const [key, value] of params.entries()) {
+      url.searchParams.set(key, value);
+    }
+    return url.toString();
+  }
+
+  const appScheme = scheme.replace(/:\/\/?.*$/, "").replace(/\/.*$/, "");
+  return `${appScheme}://oauth/ebay/callback?${params.toString()}`;
+}
+
 function redirectToApp(opts: {
   scheme: string;
   status: "success" | "error";
@@ -104,13 +122,20 @@ function redirectToApp(opts: {
     if (opts.account) params.set("account", opts.account);
     if (opts.environment) params.set("environment", opts.environment);
   }
-  const target =
-    `${opts.scheme}://oauth/ebay/callback?${params.toString()}`;
 
+  const target = buildRedirectTarget(opts.scheme, params);
+
+  // Web companion: send the browser straight back to Settings.
+  if (isWebReturnUrl(opts.scheme)) {
+    return Response.redirect(target, 302);
+  }
+
+  // Mobile deep link: HTML bridge (browsers won't follow nexissue:// via 302).
   return new Response(
     `<!doctype html>
-<html><head>
-  <meta http-equiv="refresh" content="0;url=${target}" />
+<html lang="en"><head>
+  <meta charset="utf-8" />
+  <meta http-equiv="refresh" content="0;url=${target.replace(/"/g, "&quot;")}" />
   <title>Connecting…</title>
   <style>
     body{background:#0D0D12;color:#F4F4F8;font-family:-apple-system,sans-serif;text-align:center;padding:48px}
@@ -119,7 +144,7 @@ function redirectToApp(opts: {
 </head>
 <body>
   <p>Returning you to NexIssue…</p>
-  <p><a href="${target}">Open NexIssue</a></p>
+  <p><a href="${target.replace(/"/g, "&quot;")}">Open NexIssue</a></p>
   <script>window.location.replace(${JSON.stringify(target)});</script>
 </body></html>`,
     {
@@ -391,6 +416,11 @@ Deno.serve(async (req) => {
       errorMessage: persisted.message,
     });
   }
+
+  await optInToSellingPolicyManagement({
+    env,
+    accessToken: tokens.access_token,
+  });
 
   return redirectToApp({
     scheme,

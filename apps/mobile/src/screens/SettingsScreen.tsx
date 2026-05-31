@@ -7,9 +7,13 @@ import { colors } from "../theme/colors";
 
 type SettingsScreenProps = {
   onOpenIntegrations: () => void;
+  onOpenShipping: () => void;
 };
 
-export function SettingsScreen({ onOpenIntegrations }: SettingsScreenProps) {
+export function SettingsScreen({
+  onOpenIntegrations,
+  onOpenShipping,
+}: SettingsScreenProps) {
   const { user, signOut } = useAuth();
 
   return (
@@ -36,6 +40,22 @@ export function SettingsScreen({ onOpenIntegrations }: SettingsScreenProps) {
             <Text style={styles.rowTitle}>Integrations</Text>
             <Text style={styles.rowMeta}>
               Connect eBay, Shippo, and GoCollect
+            </Text>
+          </View>
+          <AppIcon name="chevron-forward" size={18} color={colors.textMuted} />
+        </Pressable>
+
+        <Pressable
+          onPress={onOpenShipping}
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        >
+          <View style={styles.rowIcon}>
+            <AppIcon name="cube-outline" size={20} color={colors.accent} />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle}>Shipping</Text>
+            <Text style={styles.rowMeta}>
+              From address and package presets
             </Text>
           </View>
           <AppIcon name="chevron-forward" size={18} color={colors.textMuted} />

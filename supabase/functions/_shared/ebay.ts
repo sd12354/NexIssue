@@ -103,6 +103,7 @@ export const EBAY_DEFAULT_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
   "https://api.ebay.com/oauth/api_scope/sell.account.readonly",
+  "https://api.ebay.com/oauth/api_scope/sell.account",
 ];
 
 export function ebayUrls(env: EbayEnv): EbayUrls {

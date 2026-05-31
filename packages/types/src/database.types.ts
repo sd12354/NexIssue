@@ -410,6 +410,7 @@ export type Database = {
           id: string
           name: string
           plan: Database["public"]["Enums"]["plan_tier"]
+          shipping_from: Json | null
           status: string
           updated_at: string
         }
@@ -419,6 +420,7 @@ export type Database = {
           id?: string
           name: string
           plan?: Database["public"]["Enums"]["plan_tier"]
+          shipping_from?: Json | null
           status?: string
           updated_at?: string
         }
@@ -428,10 +430,99 @@ export type Database = {
           id?: string
           name?: string
           plan?: Database["public"]["Enums"]["plan_tier"]
+          shipping_from?: Json | null
           status?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      org_shipping_presets: {
+        Row: {
+          created_at: string
+          distance_unit: string
+          height: number
+          id: string
+          is_default: boolean
+          length: number
+          mass_unit: string
+          name: string
+          org_id: string
+          weight: number
+          width: number
+        }
+        Insert: {
+          created_at?: string
+          distance_unit?: string
+          height: number
+          id?: string
+          is_default?: boolean
+          length: number
+          mass_unit?: string
+          name: string
+          org_id: string
+          weight: number
+          width: number
+        }
+        Update: {
+          created_at?: string
+          distance_unit?: string
+          height?: number
+          id?: string
+          is_default?: boolean
+          length?: number
+          mass_unit?: string
+          name?: string
+          org_id?: string
+          weight?: number
+          width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_shipping_presets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_tokens: {
+        Row: {
+          created_at: string
+          expo_push_token: string
+          id: string
+          org_id: string
+          platform: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expo_push_token: string
+          id?: string
+          org_id: string
+          platform?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expo_push_token?: string
+          id?: string
+          org_id?: string
+          platform?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       photos: {
         Row: {
@@ -488,6 +579,7 @@ export type Database = {
           fetched_at: string
           grade_matched: boolean | null
           id: string
+          metadata: Json
           org_id: string
           price: number
           sale_date: string | null
@@ -500,6 +592,7 @@ export type Database = {
           fetched_at?: string
           grade_matched?: boolean | null
           id?: string
+          metadata?: Json
           org_id: string
           price: number
           sale_date?: string | null
@@ -512,6 +605,7 @@ export type Database = {
           fetched_at?: string
           grade_matched?: boolean | null
           id?: string
+          metadata?: Json
           org_id?: string
           price?: number
           sale_date?: string | null
@@ -537,42 +631,69 @@ export type Database = {
       }
       sales: {
         Row: {
+          buyer_address: Json | null
           buyer_id_external: string | null
+          buyer_username: string | null
           created_at: string
           delivered_at: string | null
+          estimated_delivery: string | null
           id: string
+          label_storage_path: string | null
           listing_id: string
           org_id: string
           shipped_at: string | null
+          shippo_label_cost: number | null
           shippo_label_id: string | null
           sold_at: string
           sold_price: number
+          status: string
+          tracking_number: string | null
+          tracking_status: string | null
+          tracking_url: string | null
           updated_at: string
         }
         Insert: {
+          buyer_address?: Json | null
           buyer_id_external?: string | null
+          buyer_username?: string | null
           created_at?: string
           delivered_at?: string | null
+          estimated_delivery?: string | null
           id?: string
+          label_storage_path?: string | null
           listing_id: string
           org_id: string
           shipped_at?: string | null
+          shippo_label_cost?: number | null
           shippo_label_id?: string | null
           sold_at?: string
           sold_price: number
+          status?: string
+          tracking_number?: string | null
+          tracking_status?: string | null
+          tracking_url?: string | null
           updated_at?: string
         }
         Update: {
+          buyer_address?: Json | null
           buyer_id_external?: string | null
+          buyer_username?: string | null
           created_at?: string
           delivered_at?: string | null
+          estimated_delivery?: string | null
           id?: string
+          label_storage_path?: string | null
           listing_id?: string
           org_id?: string
           shipped_at?: string | null
+          shippo_label_cost?: number | null
           shippo_label_id?: string | null
           sold_at?: string
           sold_price?: number
+          status?: string
+          tracking_number?: string | null
+          tracking_status?: string | null
+          tracking_url?: string | null
           updated_at?: string
         }
         Relationships: [

@@ -381,6 +381,24 @@ verify_jwt = false
 [functions.listing-create]
 verify_jwt = true
 
+[functions.ebay-policies-bootstrap]
+verify_jwt = true
+
+[functions.ebay-verify-connection]
+verify_jwt = true
+
+[functions.pricing-refresh]
+verify_jwt = true
+
+[functions.shippo-connect]
+verify_jwt = true
+
+[functions.shippo-create-label]
+verify_jwt = true
+
+[functions.shippo-webhook]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

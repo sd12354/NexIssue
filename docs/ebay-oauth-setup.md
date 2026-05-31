@@ -144,6 +144,7 @@ supabase db push
 ```bash
 supabase functions deploy ebay-oauth-start
 supabase functions deploy ebay-oauth-callback --no-verify-jwt
+supabase functions deploy ebay-policies-bootstrap
 ```
 
 `ebay-oauth-callback` MUST be deployed with `--no-verify-jwt` because eBay
@@ -274,24 +275,40 @@ supabase functions deploy listing-create --project-ref kwanmxeicyxohxxuwcjr --us
 
 ### Sandbox prerequisites
 
-Before your first sandbox listing succeeds, the connected test seller needs:
+Sandbox test users are **not** auto-enrolled in eBay Business Policy Management.
+NexIssue handles this automatically:
 
-- **Business policies** — at least one shipping (fulfillment), payment, and
-  return policy in [Sandbox Seller Hub](https://www.sandbox.ebay.com/sh/ovw).
-  The function auto-fetches the first policy of each type if IDs are not set
-  as secrets.
-- **Inventory location** — a warehouse/ship-from location in Seller Hub
-  (Settings → Business policies → Inventory locations). Optional override:
-  `EBAY_MERCHANT_LOCATION_KEY` secret.
+1. **OAuth callback** — after storing tokens, calls
+   `POST /sell/account/v1/program/opt_in` with
+   `{ "programType": "SELLING_POLICY_MANAGEMENT" }` (idempotent).
+2. **Policies bootstrap** — when eBay connects (or on demand via
+   `ebay-policies-bootstrap`), creates default policies if none exist:
+   - Fulfillment: USPS Priority, 1-day handling, ships from seller address
+   - Payment: managed payments (sandbox default)
+   - Return: 30-day buyer-paid returns
+
+   Policy IDs are stored in `org_integrations.metadata` and used by
+   `listing-create`. In production, bootstrap checks existing policies first
+   and only creates missing ones.
+
+3. **Reconnect after deploy** — the OAuth scope includes `sell.account`; users
+   who connected before this change should disconnect and reconnect eBay once,
+   or open Integrations (which runs bootstrap on connect).
+
+You still need an **inventory location** in
+[Sandbox Seller Hub](https://www.sandbox.ebay.com/sh/ovw) (Settings → Business
+policies → Inventory locations). Optional override:
+`EBAY_MERCHANT_LOCATION_KEY` secret.
 
 Optional Supabase secrets (see `.env.example`):
 
 - `EBAY_CATEGORY_ID` (default `259104` — Collectible Comic Books)
 - `EBAY_FULFILLMENT_POLICY_ID`, `EBAY_PAYMENT_POLICY_ID`, `EBAY_RETURN_POLICY_ID`
+  (fallback if metadata is empty)
 - `EBAY_MERCHANT_LOCATION_KEY`
 
-If publish fails with a policy or location error, create those in sandbox Seller
-Hub first, then retry **Publish to eBay** from the app.
+If publish fails with a location error, create an inventory location in sandbox
+Seller Hub, then retry **Publish to eBay** from the app.
 
 ## Future work
 

@@ -53,10 +53,18 @@ export {
   IntegrationError,
   listIntegrations,
   startEbayOAuth,
+  bootstrapEbayPolicies,
+  connectShippo,
+  testShippoIntegration,
+  verifyEbayConnection,
   type EbayOAuthStart,
+  type EbayPoliciesBootstrap,
+  type EbayVerificationResult,
   type IntegrationMetadata,
   type IntegrationProvider,
+  type IntegrationVerification,
   type OrgIntegration,
+  type ShippoConnectResult,
 } from "./queries/integrations";
 
 export {
@@ -71,3 +79,60 @@ export {
   type PublishListingInput,
   type PublishListingResult,
 } from "./listing-create";
+
+export {
+  listListings,
+  type Listing,
+  type ListingWithComic,
+} from "./queries/listings";
+
+export {
+  bandsFromHistory,
+  chartPointsFromHistory,
+  isPricingStale,
+  latestFetchedAt,
+  listPriceHistory,
+  PricingError,
+  PRICING_STALE_MS,
+  refreshPricing,
+  type ChartPoint,
+  type PriceBandWindow,
+  type PriceHistoryRow,
+  type PriceSourceDiagnostic,
+  type PriceSourceDiagnostics,
+  type PriceSourceStatus,
+  type PricingRefreshResult,
+  type SoldCompsBreakdown,
+  type SourcePriceBands,
+} from "./queries/pricing";
+
+export {
+  computeProfit,
+  createShippingLabel,
+  createSignedLabelUrl,
+  deriveSaleStatus,
+  getSale,
+  listSales,
+  SalesError,
+  SHIPPING_LABELS_BUCKET,
+  type CreateLabelResult,
+  type ProfitBreakdown,
+  type SaleRow,
+  type SaleStatusLabel,
+  type SaleWithComic,
+} from "./queries/sales";
+
+export {
+  createShippingPreset,
+  deleteShippingPreset,
+  formatPresetDimensions,
+  getShippingFrom,
+  listShippingPresets,
+  registerPushToken,
+  setDefaultShippingPreset,
+  updateShippingFrom,
+  updateShippingPreset,
+  type ShippingFromAddress,
+  type ShippingPreset,
+  type ShippingPresetInput,
+} from "./queries/shipping";

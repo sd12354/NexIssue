@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ComicPricingSection } from "../components/pricing/ComicPricingSection";
 import { AppIcon } from "../components/AppIcon";
 import { supabase } from "../lib/supabase";
 import { colors } from "../theme/colors";
@@ -190,6 +191,8 @@ export function ComicDetailScreen({
             ))}
           </View>
         ) : null}
+
+        <ComicPricingSection comicId={comic.id} orgId={comic.org_id} />
 
         {comic.status === "in_inventory" ? (
           <Pressable

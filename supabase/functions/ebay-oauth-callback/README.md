@@ -18,8 +18,10 @@ for the full developer-dashboard walkthrough.
    `OAUTH_TOKEN_ENCRYPTION_KEY` secret.
 6. Upserts the encrypted blob into `public.org_integrations.credentials`,
    and non-secret display metadata into `public.org_integrations.metadata`.
-7. 302-redirects the browser to the mobile app via
-   `nexissue://oauth/ebay/callback?status=success|error&...`.
+7. Redirects the browser back to the app:
+   - **Mobile:** `nexissue://oauth/ebay/callback?status=success|error&...`
+   - **Web:** merges `status`, `account`, etc. onto the `returnScheme` URL
+     (e.g. `https://your-domain/settings?tab=integrations&status=success`)
 
 ## Required Supabase secrets
 

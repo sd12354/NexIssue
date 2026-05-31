@@ -1,12 +1,19 @@
-import { createClient } from "@app/api";
+import { createClient, type NexIssueSupabaseClient } from "@app/api";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+let client: NexIssueSupabaseClient | null = null;
 
-if (!url || !anonKey) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  );
+export function getSupabase(): NexIssueSupabaseClient {
+  if (client) return client;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    );
+  }
+
+  client = createClient({ url, anonKey });
+  return client;
 }
-
-export const supabase = createClient({ url, anonKey });

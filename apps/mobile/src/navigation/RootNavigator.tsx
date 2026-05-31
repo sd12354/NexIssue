@@ -6,6 +6,7 @@ import { AppIcon } from "../components/AppIcon";
 import { LoadingSplash } from "../components/LoadingSplash";
 import { MainTabBar } from "../components/MainTabBar";
 import { useAuth } from "../contexts/AuthContext";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import { CatalogProvider } from "../contexts/CatalogContext";
 import { CatalogScreen } from "../screens/CatalogScreen";
 import { CertConfirmScreen } from "../screens/CertConfirmScreen";
@@ -14,8 +15,11 @@ import { HomeScreen } from "../screens/HomeScreen";
 import { IntegrationsScreen } from "../screens/IntegrationsScreen";
 import { LabelCaptureScreen } from "../screens/LabelCaptureScreen";
 import { PlaceholderScreen } from "../screens/PlaceholderScreen";
+import { SaleDetailScreen } from "../screens/SaleDetailScreen";
 import { ScannerScreen } from "../screens/ScannerScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
+import { ShippingAddressScreen } from "../screens/ShippingAddressScreen";
+import { ShippingPresetsScreen } from "../screens/ShippingPresetsScreen";
 import { SignInScreen } from "../screens/SignInScreen";
 import { SignUpScreen } from "../screens/SignUpScreen";
 import { colors } from "../theme/colors";
@@ -27,7 +31,7 @@ import type {
   ScanStep,
 } from "./types";
 
-type SettingsRoute = "root" | "integrations";
+type SettingsRoute = "root" | "integrations" | "shipping" | "shipping-presets";
 
 function SettingsStack({
   route,
@@ -39,8 +43,24 @@ function SettingsStack({
   if (route === "integrations") {
     return <IntegrationsScreen onBack={() => onRouteChange("root")} />;
   }
+  if (route === "shipping-presets") {
+    return (
+      <ShippingPresetsScreen onBack={() => onRouteChange("shipping")} />
+    );
+  }
+  if (route === "shipping") {
+    return (
+      <ShippingAddressScreen
+        onBack={() => onRouteChange("root")}
+        onOpenPresets={() => onRouteChange("shipping-presets")}
+      />
+    );
+  }
   return (
-    <SettingsScreen onOpenIntegrations={() => onRouteChange("integrations")} />
+    <SettingsScreen
+      onOpenIntegrations={() => onRouteChange("integrations")}
+      onOpenShipping={() => onRouteChange("shipping")}
+    />
   );
 }
 
@@ -50,16 +70,25 @@ function MainContent({
   settingsRoute,
   onSettingsRouteChange,
   onOpenIntegrations,
+  onOpenSale,
+  onOpenShippingSettings,
 }: {
   tab: MainTab;
   onScanTab: () => void;
   settingsRoute: SettingsRoute;
   onSettingsRouteChange: (route: SettingsRoute) => void;
   onOpenIntegrations: () => void;
+  onOpenSale: (saleId: string) => void;
+  onOpenShippingSettings: () => void;
 }) {
   switch (tab) {
     case "Home":
-      return <HomeScreen />;
+      return (
+        <HomeScreen
+          onOpenSale={onOpenSale}
+          onOpenShippingSettings={onOpenShippingSettings}
+        />
+      );
     case "Catalog":
       return (
         <CatalogScreen onAdd={onScanTab} onOpenIntegrations={onOpenIntegrations} />
@@ -171,7 +200,9 @@ function ScanFlow({ onFinishedSave }: { onFinishedSave: () => void }) {
 function MainShell() {
   const [tab, setTab] = useState<MainTab>("Home");
   const [settingsRoute, setSettingsRoute] = useState<SettingsRoute>("root");
+  const [viewingSaleId, setViewingSaleId] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
+  usePushNotifications();
   const isScanFlow = tab === "Scan";
   const title = tab === "Home" ? "NexIssue" : tab;
   const headerIcon = headerIcons[tab];
@@ -180,6 +211,29 @@ function MainShell() {
     setTab("Settings");
     setSettingsRoute("integrations");
   };
+
+  const openShippingSettings = () => {
+    setTab("Settings");
+    setSettingsRoute("shipping");
+  };
+
+  if (viewingSaleId) {
+    return (
+      <View style={styles.shell}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <AppIcon name={headerIcons.Home} size={22} color={colors.text} />
+          <Text style={styles.headerTitle}>Sale</Text>
+        </View>
+        <View style={styles.content}>
+          <SaleDetailScreen
+            saleId={viewingSaleId}
+            onBack={() => setViewingSaleId(null)}
+          />
+        </View>
+        <MainTabBar active={tab} onChange={setTab} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.shell}>
@@ -211,6 +265,8 @@ function MainShell() {
             settingsRoute={settingsRoute}
             onSettingsRouteChange={setSettingsRoute}
             onOpenIntegrations={openIntegrations}
+            onOpenSale={setViewingSaleId}
+            onOpenShippingSettings={openShippingSettings}
           />
         )}
       </View>

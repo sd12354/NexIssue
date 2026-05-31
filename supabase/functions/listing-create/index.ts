@@ -23,9 +23,11 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 import { CORS_HEADERS, jsonResponse } from "../_shared/cors.ts";
 import {
+  bootstrapEbayPolicies,
   buildListingUrl,
   createOffer,
   getValidEbayAccessToken,
+  optInToSellingPolicyManagement,
   publishOffer,
   resolveListingPolicies,
   resolveMerchantLocationKey,
@@ -225,10 +227,13 @@ Deno.serve(async (req) => {
 
   const { data: integration, error: integrationError } = await admin
     .from("org_integrations")
-    .select("credentials")
+    .select("credentials, metadata")
     .eq("org_id", orgId)
     .eq("provider", "ebay")
-    .maybeSingle<{ credentials: EncryptedBlob }>();
+    .maybeSingle<{
+      credentials: EncryptedBlob;
+      metadata: Record<string, unknown> | null;
+    }>();
 
   if (integrationError) {
     console.error("listing-create: integration lookup failed", integrationError);
@@ -318,13 +323,54 @@ Deno.serve(async (req) => {
   const sku = comic.id;
 
   try {
-    const policies = await resolveListingPolicies({
-      env,
-      accessToken,
-      fulfillmentPolicyId: Deno.env.get("EBAY_FULFILLMENT_POLICY_ID"),
-      paymentPolicyId: Deno.env.get("EBAY_PAYMENT_POLICY_ID"),
-      returnPolicyId: Deno.env.get("EBAY_RETURN_POLICY_ID"),
-    });
+    const metadata = integration.metadata ?? {};
+    await optInToSellingPolicyManagement({ env, accessToken });
+
+    const secretFulfillmentPolicyId = Deno.env.get("EBAY_FULFILLMENT_POLICY_ID");
+    const secretPaymentPolicyId = Deno.env.get("EBAY_PAYMENT_POLICY_ID");
+    const secretReturnPolicyId = Deno.env.get("EBAY_RETURN_POLICY_ID");
+
+    const policies = secretFulfillmentPolicyId ||
+        secretPaymentPolicyId ||
+        secretReturnPolicyId
+      ? await resolveListingPolicies({
+        env,
+        accessToken,
+        fulfillmentPolicyId:
+          (typeof metadata.fulfillmentPolicyId === "string"
+            ? metadata.fulfillmentPolicyId
+            : null) ?? secretFulfillmentPolicyId,
+        paymentPolicyId:
+          (typeof metadata.paymentPolicyId === "string"
+            ? metadata.paymentPolicyId
+            : null) ?? secretPaymentPolicyId,
+        returnPolicyId:
+          (typeof metadata.returnPolicyId === "string"
+            ? metadata.returnPolicyId
+            : null) ?? secretReturnPolicyId,
+      })
+      : (await bootstrapEbayPolicies({
+        env,
+        accessToken,
+        existingMetadata: metadata,
+      })).policies;
+
+    const now = new Date().toISOString();
+    await admin
+      .from("org_integrations")
+      .update({
+        metadata: {
+          ...metadata,
+          ...policies,
+          policiesBootstrappedAt:
+            typeof metadata.policiesBootstrappedAt === "string"
+              ? metadata.policiesBootstrappedAt
+              : now,
+        },
+        last_used_at: now,
+      })
+      .eq("org_id", orgId)
+      .eq("provider", "ebay");
 
     const merchantLocationKey = await resolveMerchantLocationKey({
       env,
@@ -359,7 +405,6 @@ Deno.serve(async (req) => {
       offerId,
     });
 
-    const now = new Date().toISOString();
     const { data: listing, error: listingError } = await admin
       .from("listings")
       .insert({

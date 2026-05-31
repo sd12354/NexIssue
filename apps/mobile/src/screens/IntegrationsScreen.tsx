@@ -16,12 +16,18 @@
  */
 
 import {
+  bootstrapEbayPolicies,
+  connectShippo,
   disconnectIntegration,
   IntegrationError,
   listIntegrations,
   startEbayOAuth,
+  testShippoIntegration,
+  verifyEbayConnection,
+  type EbayVerificationResult,
   type IntegrationMetadata,
   type IntegrationProvider,
+  type IntegrationVerification,
   type OrgIntegration,
 } from "@app/api";
 import * as Linking from "expo-linking";
@@ -37,6 +43,8 @@ import {
   StyleSheet,
   Text,
   View,
+  Modal,
+  TextInput,
 } from "react-native";
 
 import { AppIcon } from "../components/AppIcon";
@@ -72,8 +80,7 @@ const PROVIDERS: ReadonlyArray<ProviderUi> = [
     name: "Shippo",
     description: "Auto-generate shipping labels when a comic sells.",
     logo: require("../../assets/integrations/shippo-logo.png"),
-    available: false,
-    unavailableNote: "Coming after Phase 4 (Fulfillment).",
+    available: true,
   },
   {
     id: "gocollect",
@@ -86,13 +93,28 @@ const PROVIDERS: ReadonlyArray<ProviderUi> = [
   },
 ];
 
-type IntegrationStatus = "connected" | "available" | "unavailable";
+type IntegrationStatus =
+  | "connected"
+  | "needs_reconnect"
+  | "check_failed"
+  | "checking"
+  | "available"
+  | "unavailable";
 
 function statusFor(
   provider: ProviderUi,
   integration: OrgIntegration | undefined,
+  ebayVerification: IntegrationVerification | null,
+  verifyingEbay: boolean,
 ): IntegrationStatus {
-  if (integration) return "connected";
+  if (integration) {
+    if (provider.id === "ebay") {
+      if (ebayVerification?.status === "needs_reconnect") return "needs_reconnect";
+      if (ebayVerification?.status === "error") return "check_failed";
+      if (verifyingEbay && !ebayVerification) return "checking";
+    }
+    return "connected";
+  }
   if (provider.available) return "available";
   return "unavailable";
 }
@@ -127,6 +149,27 @@ function StatusBadge({ status }: { status: IntegrationStatus }) {
       </View>
     );
   }
+  if (status === "needs_reconnect") {
+    return (
+      <View style={[styles.badge, styles.badgeDanger]}>
+        <Text style={styles.badgeLabelDanger}>Reconnect needed</Text>
+      </View>
+    );
+  }
+  if (status === "check_failed") {
+    return (
+      <View style={[styles.badge, styles.badgeWarning]}>
+        <Text style={styles.badgeLabelWarning}>Check failed</Text>
+      </View>
+    );
+  }
+  if (status === "checking") {
+    return (
+      <View style={[styles.badge, styles.badgeAvailable]}>
+        <Text style={styles.badgeLabel}>Checking…</Text>
+      </View>
+    );
+  }
   if (status === "available") {
     return (
       <View style={[styles.badge, styles.badgeAvailable]}>
@@ -156,6 +199,13 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
   const [statusBanner, setStatusBanner] = useState<
     { kind: "success" | "error"; message: string } | null
   >(null);
+  const [shippoModalOpen, setShippoModalOpen] = useState(false);
+  const [shippoApiKey, setShippoApiKey] = useState("");
+  const [useTestKeyHint, setUseTestKeyHint] = useState(false);
+  const [ebayVerification, setEbayVerification] = useState<
+    IntegrationVerification | null
+  >(null);
+  const [verifyingEbay, setVerifyingEbay] = useState(false);
 
   const byProvider = useMemo(() => {
     const map = new Map<IntegrationProvider, OrgIntegration>();
@@ -164,16 +214,14 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
   }, [integrations]);
 
   const refresh = useCallback(async () => {
-    if (!orgId) {
-      setIntegrations([]);
-      setLoading(false);
-      return;
-    }
+    if (!orgId) return;
     setLoading(true);
     setError(null);
     try {
       const rows = await listIntegrations(supabase, orgId);
       setIntegrations(rows);
+      const ebayRow = rows.find((row) => row.provider === "ebay");
+      setEbayVerification(ebayRow?.metadata?.verification ?? null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not load integrations.",
@@ -186,6 +234,71 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const applyVerificationResult = useCallback(
+    (result: EbayVerificationResult, options: { silent?: boolean } = {}) => {
+      const lastVerifiedAt = result.lastVerifiedAt ?? new Date().toISOString();
+      const account =
+        result.ok && result.account
+          ? result.account
+          : ebayVerification?.account ?? null;
+      const next: IntegrationVerification = result.ok
+        ? { status: "ok", last_verified_at: lastVerifiedAt, account }
+        : {
+            status:
+              result.code === "needs_reconnect" ? "needs_reconnect" : "error",
+            last_verified_at: lastVerifiedAt,
+            account,
+            error_code: result.code,
+            error_message: result.message,
+          };
+      setEbayVerification(next);
+      if (!options.silent) {
+        if (result.ok) {
+          setStatusBanner({
+            kind: "success",
+            message: account
+              ? `eBay connection OK (${account}).`
+              : "eBay connection OK.",
+          });
+        } else {
+          setStatusBanner({ kind: "error", message: result.message });
+        }
+      }
+    },
+    [ebayVerification?.account],
+  );
+
+  const handleVerifyEbay = useCallback(
+    async (options: { silent?: boolean } = {}) => {
+      if (verifyingEbay) return;
+      setVerifyingEbay(true);
+      try {
+        const result = await verifyEbayConnection(supabase);
+        applyVerificationResult(result, options);
+      } catch (err) {
+        if (!options.silent) {
+          setStatusBanner({
+            kind: "error",
+            message: err instanceof IntegrationError
+              ? err.message
+              : "Could not verify eBay connection.",
+          });
+        }
+      } finally {
+        setVerifyingEbay(false);
+      }
+    },
+    [verifyingEbay, applyVerificationResult],
+  );
+
+  const hasEbay = byProvider.has("ebay");
+  useEffect(() => {
+    if (!hasEbay) return;
+    void handleVerifyEbay({ silent: true });
+    // Trigger once whenever an eBay integration appears in this session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasEbay]);
 
   const handleConnectEbay = useCallback(async () => {
     if (!orgId || busyProvider) return;
@@ -210,12 +323,23 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
         const parsed = Linking.parse(result.url);
         const params = (parsed.queryParams ?? {}) as Record<string, string>;
         if (params.status === "success") {
-          setStatusBanner({
-            kind: "success",
-            message: params.account
-              ? `Connected to eBay as ${params.account}.`
-              : "eBay connected.",
-          });
+          try {
+            const bootstrap = await bootstrapEbayPolicies(supabase);
+            setStatusBanner({
+              kind: "success",
+              message: bootstrap.created
+                ? "Default policies created — you can customize in eBay Seller Hub."
+                : bootstrap.message,
+            });
+          } catch (bootstrapErr) {
+            setStatusBanner({
+              kind: "success",
+              message: params.account
+                ? `Connected to eBay as ${params.account}.`
+                : "eBay connected.",
+            });
+            console.warn("eBay policy bootstrap failed", bootstrapErr);
+          }
         } else {
           setStatusBanner({
             kind: "error",
@@ -235,6 +359,66 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
       setBusyProvider(null);
     }
   }, [orgId, busyProvider, refresh]);
+
+  const handleConnectShippo = useCallback(async () => {
+    if (!orgId || busyProvider) return;
+    const key = shippoApiKey.trim();
+    if (!key) {
+      setStatusBanner({
+        kind: "error",
+        message: "Enter your Shippo API key.",
+      });
+      return;
+    }
+
+    setBusyProvider("shippo");
+    setStatusBanner(null);
+    try {
+      const result = await connectShippo(supabase, key);
+      setShippoModalOpen(false);
+      setShippoApiKey("");
+      setStatusBanner({
+        kind: "success",
+        message: result.testMode
+          ? `Connected to Shippo (test mode) as ${result.account}.`
+          : `Connected to Shippo as ${result.account}.`,
+      });
+      await refresh();
+    } catch (err) {
+      setStatusBanner({
+        kind: "error",
+        message: err instanceof IntegrationError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Invalid API key — check and try again.",
+      });
+    } finally {
+      setBusyProvider(null);
+    }
+  }, [orgId, busyProvider, refresh, shippoApiKey]);
+
+  const handleTestShippo = useCallback(async () => {
+    if (!orgId || busyProvider) return;
+    setBusyProvider("shippo");
+    setStatusBanner(null);
+    try {
+      const result = await testShippoIntegration(supabase);
+      setStatusBanner({
+        kind: "success",
+        message: `Shippo connection OK (${result.account}).`,
+      });
+    } catch (err) {
+      setStatusBanner({
+        kind: "error",
+        message: err instanceof IntegrationError
+          ? err.message
+          : "Connection test failed.",
+      });
+    } finally {
+      setBusyProvider(null);
+    }
+  }, [orgId, busyProvider]);
 
   const handleDisconnect = useCallback(
     (provider: IntegrationProvider, accountLabel: string | null) => {
@@ -333,8 +517,16 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
           PROVIDERS.map((provider) => {
             const integration = byProvider.get(provider.id);
             const metadata = (integration?.metadata ?? {}) as IntegrationMetadata;
-            const status = statusFor(provider, integration);
+            const status = statusFor(
+              provider,
+              integration,
+              provider.id === "ebay" ? ebayVerification : null,
+              provider.id === "ebay" ? verifyingEbay : false,
+            );
             const isBusy = busyProvider === provider.id;
+            const isEbay = provider.id === "ebay";
+            const needsReconnect = isEbay && status === "needs_reconnect";
+            const checkFailed = isEbay && status === "check_failed";
 
             return (
               <View key={provider.id} style={styles.card}>
@@ -366,6 +558,11 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
                         <Text style={styles.sandboxPillText}>Sandbox</Text>
                       </View>
                     ) : null}
+                    {metadata.test_mode ? (
+                      <View style={styles.sandboxPill}>
+                        <Text style={styles.sandboxPillText}>Test key</Text>
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
 
@@ -376,6 +573,24 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
                   </Text>
                 ) : null}
 
+                {isEbay && ebayVerification?.last_verified_at ? (
+                  <Text style={styles.metaSubText}>
+                    Last checked:{" "}
+                    {new Date(ebayVerification.last_verified_at).toLocaleString()}
+                  </Text>
+                ) : null}
+
+                {isEbay && (needsReconnect || checkFailed) ? (
+                  <Text
+                    style={[
+                      styles.metaSubText,
+                      { color: needsReconnect ? colors.danger : "#F0B86E" },
+                    ]}
+                  >
+                    {ebayVerification?.error_message ?? "eBay check failed."}
+                  </Text>
+                ) : null}
+
                 {status === "unavailable" && provider.unavailableNote ? (
                   <Text style={styles.metaSubText}>
                     {provider.unavailableNote}
@@ -383,35 +598,89 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
                 ) : null}
 
                 <View style={styles.actions}>
-                  {status === "connected" ? (
-                    <Pressable
-                      disabled={isBusy}
-                      onPress={() =>
-                        handleDisconnect(provider.id, metadata.account ?? null)}
-                      style={({ pressed }) => [
-                        styles.actionButton,
-                        styles.actionButtonDanger,
-                        pressed && styles.actionButtonPressed,
-                      ]}
-                    >
-                      {isBusy ? (
-                        <ActivityIndicator
-                          size="small"
-                          color={colors.danger}
-                        />
-                      ) : (
-                        <>
-                          <AppIcon
-                            name="unlink-outline"
-                            size={16}
+                  {(status === "connected" ||
+                    status === "needs_reconnect" ||
+                    status === "check_failed" ||
+                    status === "checking") ? (
+                    <>
+                      {isEbay ? (
+                        <Pressable
+                          disabled={verifyingEbay}
+                          onPress={() => void handleVerifyEbay()}
+                          style={({ pressed }) => [
+                            styles.actionButton,
+                            styles.actionButtonGhost,
+                            pressed && styles.actionButtonPressed,
+                          ]}
+                        >
+                          {verifyingEbay ? (
+                            <ActivityIndicator size="small" color={colors.accent} />
+                          ) : (
+                            <Text style={styles.actionButtonGhostLabel}>
+                              Test connection
+                            </Text>
+                          )}
+                        </Pressable>
+                      ) : null}
+                      {isEbay && (needsReconnect || checkFailed) ? (
+                        <Pressable
+                          disabled={isBusy}
+                          onPress={() => void handleConnectEbay()}
+                          style={({ pressed }) => [
+                            styles.actionButton,
+                            styles.actionButtonPrimary,
+                            pressed && styles.actionButtonPressed,
+                          ]}
+                        >
+                          <Text style={styles.actionButtonPrimaryLabel}>
+                            Reconnect
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      {provider.id === "shippo" ? (
+                        <Pressable
+                          disabled={isBusy}
+                          onPress={() => void handleTestShippo()}
+                          style={({ pressed }) => [
+                            styles.actionButton,
+                            styles.actionButtonGhost,
+                            pressed && styles.actionButtonPressed,
+                          ]}
+                        >
+                          <Text style={styles.actionButtonGhostLabel}>
+                            Test connection
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable
+                        disabled={isBusy}
+                        onPress={() =>
+                          handleDisconnect(provider.id, metadata.account ?? null)}
+                        style={({ pressed }) => [
+                          styles.actionButton,
+                          styles.actionButtonDanger,
+                          pressed && styles.actionButtonPressed,
+                        ]}
+                      >
+                        {isBusy ? (
+                          <ActivityIndicator
+                            size="small"
                             color={colors.danger}
                           />
-                          <Text style={styles.actionButtonDangerLabel}>
-                            Disconnect
-                          </Text>
-                        </>
-                      )}
-                    </Pressable>
+                        ) : (
+                          <>
+                            <AppIcon
+                              name="unlink-outline"
+                              size={16}
+                              color={colors.danger}
+                            />
+                            <Text style={styles.actionButtonDangerLabel}>
+                              Disconnect
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    </>
                   ) : status === "available" && provider.id === "ebay" ? (
                     <Pressable
                       disabled={isBusy || !orgId}
@@ -440,6 +709,24 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
                         </>
                       )}
                     </Pressable>
+                  ) : status === "available" && provider.id === "shippo" ? (
+                    <Pressable
+                      disabled={isBusy || !orgId}
+                      onPress={() => {
+                        setShippoApiKey("");
+                        setUseTestKeyHint(false);
+                        setShippoModalOpen(true);
+                      }}
+                      style={({ pressed }) => [
+                        styles.actionButton,
+                        styles.actionButtonPrimary,
+                        pressed && styles.actionButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.actionButtonPrimaryLabel}>
+                        Connect Shippo
+                      </Text>
+                    </Pressable>
                   ) : (
                     <View
                       style={[styles.actionButton, styles.actionButtonGhost]}
@@ -455,6 +742,62 @@ export function IntegrationsScreen({ onBack }: IntegrationsScreenProps) {
           })
         )}
       </ScrollView>
+
+      <Modal visible={shippoModalOpen} animationType="slide" transparent>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Enter Shippo API key</Text>
+            <TextInput
+              value={shippoApiKey}
+              onChangeText={setShippoApiKey}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={useTestKeyHint ? "shippo_test_..." : "Shippo API key"}
+              placeholderTextColor={colors.textMuted}
+              style={styles.modalInput}
+            />
+            <Pressable
+              onPress={() =>
+                void Linking.openURL("https://app.goshippo.com/settings/api")}
+            >
+              <Text style={styles.modalLink}>Where do I find this?</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setUseTestKeyHint((value) => !value)}
+              style={styles.testKeyRow}
+            >
+              <AppIcon
+                name={useTestKeyHint ? "checkbox" : "square-outline"}
+                size={18}
+                color={colors.accent}
+              />
+              <Text style={styles.testKeyLabel}>
+                Use test key (starts with shippo_test_)
+              </Text>
+            </Pressable>
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setShippoModalOpen(false)}
+                style={styles.modalCancel}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={busyProvider === "shippo"}
+                onPress={() => void handleConnectShippo()}
+                style={styles.modalConnect}
+              >
+                {busyProvider === "shippo" ? (
+                  <ActivityIndicator color={colors.text} />
+                ) : (
+                  <Text style={styles.modalConnectText}>Connect</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -569,6 +912,24 @@ const styles = StyleSheet.create({
     borderColor: colors.surfaceBorder,
     opacity: 0.7,
   },
+  badgeDanger: {
+    backgroundColor: "rgba(255, 95, 109, 0.12)",
+    borderColor: "rgba(255, 95, 109, 0.5)",
+  },
+  badgeLabelDanger: {
+    color: colors.danger,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  badgeWarning: {
+    backgroundColor: "rgba(240, 184, 110, 0.12)",
+    borderColor: "rgba(240, 184, 110, 0.5)",
+  },
+  badgeLabelWarning: {
+    color: "#F0B86E",
+    fontSize: 11,
+    fontWeight: "700",
+  },
   badgeLabel: { color: colors.textMuted, fontSize: 11, fontWeight: "600" },
   badgeLabelConnected: {
     color: "#5EE8B7",
@@ -653,4 +1014,53 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   actionButtonPressed: { opacity: 0.7 },
+  modalBackdrop: {
+    backgroundColor: "rgba(0,0,0,0.6)",
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 20,
+  },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: "700" },
+  modalInput: {
+    backgroundColor: colors.background,
+    borderColor: colors.surfaceBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 15,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  modalLink: { color: colors.accent, fontSize: 13, marginTop: 10 },
+  testKeyRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  testKeyLabel: { color: colors.textMuted, fontSize: 13 },
+  modalActions: { flexDirection: "row", gap: 12, marginTop: 16 },
+  modalCancel: {
+    alignItems: "center",
+    borderColor: colors.surfaceBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 12,
+  },
+  modalCancelText: { color: colors.textMuted, fontWeight: "600" },
+  modalConnect: {
+    alignItems: "center",
+    backgroundColor: colors.accent,
+    borderRadius: 10,
+    flex: 1,
+    paddingVertical: 12,
+  },
+  modalConnectText: { color: colors.text, fontWeight: "700" },
 });

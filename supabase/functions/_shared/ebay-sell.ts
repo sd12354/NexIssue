@@ -27,6 +27,15 @@ export type ListingPolicies = {
   returnPolicyId: string;
 };
 
+export type EbayPolicyMetadata = ListingPolicies & {
+  policiesBootstrappedAt?: string;
+};
+
+const MARKETPLACE_QUERY = "marketplace_id=EBAY_US";
+const DEFAULT_CATEGORY_TYPES = [
+  { name: "ALL_EXCLUDING_MOTORS_VEHICLES", default: true },
+];
+
 function sellApiBase(env: EbayEnv): string {
   return env === "sandbox"
     ? "https://api.sandbox.ebay.com"
@@ -65,6 +74,12 @@ async function ebaySellRequest<T>(
 
   const text = await response.text();
   if (!response.ok) {
+    const businessPolicyEligibilityMessage =
+      parseBusinessPolicyEligibilityMessage(text);
+    if (businessPolicyEligibilityMessage) {
+      throw new Error(businessPolicyEligibilityMessage);
+    }
+
     throw new Error(
       `eBay Sell API ${opts.method ?? "GET"} ${path} failed (${response.status}): ${text.slice(0, 600)}`,
     );
@@ -72,6 +87,28 @@ async function ebaySellRequest<T>(
 
   if (!text) return {} as T;
   return JSON.parse(text) as T;
+}
+
+function parseBusinessPolicyEligibilityMessage(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as {
+      errors?: Array<{ errorId?: number; message?: string; longMessage?: string }>;
+    };
+    const policyError = parsed.errors?.find((error) =>
+      error.errorId === 20403 ||
+      /not eligible for Business Policy/i.test(
+        `${error.message ?? ""} ${error.longMessage ?? ""}`,
+      )
+    );
+    if (!policyError) return null;
+  } catch {
+    return null;
+  }
+
+  return [
+    "This eBay seller account is not eligible for Business Policies, which eBay requires before NexIssue can publish listings through the Sell API.",
+    "Reconnect a production eBay seller account with Business Policies enabled, or in sandbox connect a seller test user that is enrolled for Business Policies.",
+  ].join(" ");
 }
 
 export async function refreshAccessToken(opts: {
@@ -154,14 +191,6 @@ export async function getValidEbayAccessToken(opts: {
   };
 
   const encrypted = await encryptJson(updated, opts.encryptionKey);
-  const metadata = {
-    account: null as string | null,
-    environment: env,
-    scopes: creds.scopes.split(/\s+/).filter(Boolean),
-    access_expires_at: accessExpiresAt,
-    refresh_expires_at: refreshExpiresAt,
-  };
-
   const { data: existing } = await opts.admin
     .from("org_integrations")
     .select("metadata")
@@ -169,9 +198,16 @@ export async function getValidEbayAccessToken(opts: {
     .eq("provider", "ebay")
     .maybeSingle<{ metadata: Record<string, unknown> | null }>();
 
-  if (existing?.metadata && typeof existing.metadata.account === "string") {
-    metadata.account = existing.metadata.account;
-  }
+  const metadata = {
+    ...(existing?.metadata ?? {}),
+    account: typeof existing?.metadata?.account === "string"
+      ? existing.metadata.account
+      : null,
+    environment: env,
+    scopes: creds.scopes.split(/\s+/).filter(Boolean),
+    access_expires_at: accessExpiresAt,
+    refresh_expires_at: refreshExpiresAt,
+  };
 
   const { error } = await opts.admin
     .from("org_integrations")
@@ -241,6 +277,220 @@ export async function resolveListingPolicies(opts: {
   }
 
   return { fulfillmentPolicyId, paymentPolicyId, returnPolicyId };
+}
+
+/** Enroll seller in business policy management (required for sandbox test users). */
+export async function optInToSellingPolicyManagement(opts: {
+  env: EbayEnv;
+  accessToken: string;
+}): Promise<void> {
+  try {
+    await ebaySellRequest("/sell/account/v1/program/opt_in", {
+      env: opts.env,
+      accessToken: opts.accessToken,
+      method: "POST",
+      body: { programType: "SELLING_POLICY_MANAGEMENT" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/already|opted.?in|enrolled/i.test(message)) {
+      return;
+    }
+    console.warn("eBay opt_in SELLING_POLICY_MANAGEMENT (non-fatal):", message);
+  }
+}
+
+async function firstPolicyId(
+  opts: { env: EbayEnv; accessToken: string },
+  path: string,
+  key: "fulfillmentPolicies" | "paymentPolicies" | "returnPolicies",
+  idKey: "fulfillmentPolicyId" | "paymentPolicyId" | "returnPolicyId",
+): Promise<string | null> {
+  const data = await ebaySellRequest<Record<string, unknown>>(
+    `${path}?${MARKETPLACE_QUERY}`,
+    { env: opts.env, accessToken: opts.accessToken },
+  );
+  const list = data[key];
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const first = list[0] as Record<string, unknown>;
+  const id = first[idKey];
+  return typeof id === "string" ? id : null;
+}
+
+async function fetchExistingPolicyIds(opts: {
+  env: EbayEnv;
+  accessToken: string;
+}): Promise<Partial<ListingPolicies>> {
+  const [fulfillmentPolicyId, paymentPolicyId, returnPolicyId] =
+    await Promise.all([
+      firstPolicyId(
+        opts,
+        "/sell/account/v1/fulfillment_policy",
+        "fulfillmentPolicies",
+        "fulfillmentPolicyId",
+      ),
+      firstPolicyId(
+        opts,
+        "/sell/account/v1/payment_policy",
+        "paymentPolicies",
+        "paymentPolicyId",
+      ),
+      firstPolicyId(
+        opts,
+        "/sell/account/v1/return_policy",
+        "returnPolicies",
+        "returnPolicyId",
+      ),
+    ]);
+  return { fulfillmentPolicyId: fulfillmentPolicyId ?? undefined,
+    paymentPolicyId: paymentPolicyId ?? undefined,
+    returnPolicyId: returnPolicyId ?? undefined };
+}
+
+async function createDefaultFulfillmentPolicy(opts: {
+  env: EbayEnv;
+  accessToken: string;
+}): Promise<string> {
+  const data = await ebaySellRequest<{ fulfillmentPolicyId?: string }>(
+    "/sell/account/v1/fulfillment_policy",
+    {
+      env: opts.env,
+      accessToken: opts.accessToken,
+      method: "POST",
+      body: {
+        name: "NexIssue Default Shipping",
+        marketplaceId: "EBAY_US",
+        categoryTypes: DEFAULT_CATEGORY_TYPES,
+        handlingTime: { value: 1, unit: "DAY" },
+        shippingOptions: [{
+          optionType: "DOMESTIC",
+          costType: "FLAT_RATE",
+          shippingServices: [{
+            sortOrder: 1,
+            shippingCarrierCode: "USPS",
+            shippingServiceCode: "USPSPriority",
+            shippingCost: { value: "8.99", currency: "USD" },
+            additionalShippingCost: { value: "0.00", currency: "USD" },
+            freeShipping: false,
+          }],
+        }],
+      },
+    },
+  );
+  if (!data.fulfillmentPolicyId) {
+    throw new Error("eBay did not return a fulfillment policy ID.");
+  }
+  return data.fulfillmentPolicyId;
+}
+
+async function createDefaultPaymentPolicy(opts: {
+  env: EbayEnv;
+  accessToken: string;
+}): Promise<string> {
+  const data = await ebaySellRequest<{ paymentPolicyId?: string }>(
+    "/sell/account/v1/payment_policy",
+    {
+      env: opts.env,
+      accessToken: opts.accessToken,
+      method: "POST",
+      body: {
+        name: "NexIssue Default Payment",
+        marketplaceId: "EBAY_US",
+        categoryTypes: DEFAULT_CATEGORY_TYPES,
+        immediatePay: false,
+      },
+    },
+  );
+  if (!data.paymentPolicyId) {
+    throw new Error("eBay did not return a payment policy ID.");
+  }
+  return data.paymentPolicyId;
+}
+
+async function createDefaultReturnPolicy(opts: {
+  env: EbayEnv;
+  accessToken: string;
+}): Promise<string> {
+  const data = await ebaySellRequest<{ returnPolicyId?: string }>(
+    "/sell/account/v1/return_policy",
+    {
+      env: opts.env,
+      accessToken: opts.accessToken,
+      method: "POST",
+      body: {
+        name: "NexIssue Default Returns",
+        marketplaceId: "EBAY_US",
+        categoryTypes: DEFAULT_CATEGORY_TYPES,
+        returnsAccepted: true,
+        returnPeriod: { value: 30, unit: "DAY" },
+        returnShippingCostPayer: "BUYER",
+        refundMethod: "MONEY_BACK",
+      },
+    },
+  );
+  if (!data.returnPolicyId) {
+    throw new Error("eBay did not return a return policy ID.");
+  }
+  return data.returnPolicyId;
+}
+
+export type BootstrapPoliciesResult = {
+  policies: ListingPolicies;
+  created: boolean;
+};
+
+/** Use stored IDs, existing eBay policies, or create NexIssue defaults. */
+export async function bootstrapEbayPolicies(opts: {
+  env: EbayEnv;
+  accessToken: string;
+  existingMetadata?: Record<string, unknown> | null;
+}): Promise<BootstrapPoliciesResult> {
+  const meta = opts.existingMetadata ?? {};
+  const storedFulfillment = typeof meta.fulfillmentPolicyId === "string"
+    ? meta.fulfillmentPolicyId
+    : null;
+  const storedPayment = typeof meta.paymentPolicyId === "string"
+    ? meta.paymentPolicyId
+    : null;
+  const storedReturn = typeof meta.returnPolicyId === "string"
+    ? meta.returnPolicyId
+    : null;
+
+  if (storedFulfillment && storedPayment && storedReturn) {
+    return {
+      policies: {
+        fulfillmentPolicyId: storedFulfillment,
+        paymentPolicyId: storedPayment,
+        returnPolicyId: storedReturn,
+      },
+      created: false,
+    };
+  }
+
+  const existing = await fetchExistingPolicyIds(opts);
+  let fulfillmentPolicyId = storedFulfillment ?? existing.fulfillmentPolicyId ??
+    null;
+  let paymentPolicyId = storedPayment ?? existing.paymentPolicyId ?? null;
+  let returnPolicyId = storedReturn ?? existing.returnPolicyId ?? null;
+  let created = false;
+
+  if (!fulfillmentPolicyId) {
+    fulfillmentPolicyId = await createDefaultFulfillmentPolicy(opts);
+    created = true;
+  }
+  if (!paymentPolicyId) {
+    paymentPolicyId = await createDefaultPaymentPolicy(opts);
+    created = true;
+  }
+  if (!returnPolicyId) {
+    returnPolicyId = await createDefaultReturnPolicy(opts);
+    created = true;
+  }
+
+  return {
+    policies: { fulfillmentPolicyId, paymentPolicyId, returnPolicyId },
+    created,
+  };
 }
 
 export async function resolveMerchantLocationKey(opts: {

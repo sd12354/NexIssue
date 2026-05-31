@@ -28,6 +28,7 @@
     "expo-haptics": "~15.0.8",
     "expo-image-manipulator": "~14.0.8",
     "expo-linking": "~8.0.12",
+    "expo-notifications": "~0.32.16",
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.11",
@@ -36,6 +37,7 @@
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.2",
+    "react-native-svg": "15.12.1",
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
@@ -47,7 +49,9 @@
     "autolinking": {
       "nativeModulesDir": "./modules",
       "exclude": [
-        "expo-image"
+        "expo-image",
+        "@infinitered/react-native-mlkit-core",
+        "@infinitered/react-native-mlkit-text-recognition"
       ]
     }
   }

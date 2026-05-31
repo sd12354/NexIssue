@@ -7,7 +7,22 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        background: "var(--color-background)",
+        surface: "var(--color-surface)",
+        "surface-border": "var(--color-surface-border)",
+        foreground: "var(--color-foreground)",
+        muted: "var(--color-muted)",
+        accent: "var(--color-accent)",
+        "accent-pressed": "var(--color-accent-pressed)",
+        danger: "var(--color-danger)",
+        input: "var(--color-input)",
+      },
+      borderRadius: {
+        card: "12px",
+      },
+    },
   },
   plugins: [],
 };
